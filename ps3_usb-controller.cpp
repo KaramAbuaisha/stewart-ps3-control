@@ -1,9 +1,3 @@
-/*
- Example sketch for the PS3 USB library - developed by Kristian Lauszus
- For more information visit my blog: http://blog.tkjelectronics.dk/ or
- send me an e-mail:  kristianl@tkjelectronics.com
- */
-
 #include <PS3USB.h>
 
 // Satisfy the IDE, which needs to see the include statment in the ino too.
@@ -13,61 +7,119 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_PWMServoDriver.h>
-#include <revKin.cpp>
 #include <math.h>
 #include <Geometry.h>
-
-#define PI 3.14159265
 
 USB Usb;
 /* You can create the instance of the class in two ways */
 PS3USB PS3(&Usb); // This will just create the instance
 //PS3USB PS3(&Usb,0x00,0x15,0x83,0x3D,0x0A,0x57); // This will also store the bluetooth address - this can be obtained from the dongle when running the sketch
 
-bool printAngle = True;
-uint8_t state = 0;int val[6] =  // PWM var
-
-const int SERVOMIN = 175; // 'minimum' pulse length count (out of 4096)
-const int SERVOMAX = 475; // 'maximum' pulse length count (out of 4096)
-const int SERVOMID[6] = {341, 362, 281, 320, 324, 320}; // 'mid' pulse length count (out of 4096)
-const int PS3_CENTER = 127;
-const int PULSE_PER_RAD = 138.8;
-const int TOL = 5;
+const float SERVOMIN = 175; // 'minimum' pulse length count (out of 4096)
+const float SERVOMAX = 475; // 'maximum' pulse length count (out of 4096)
+const float SERVOMID[6] = {294, 350, 308, 352, 363, 355}; // 'mid' pulse length count (out of 4096)
+const float PS3_CENTER = 127;
+const float PULSE_PER_RAD = 138.8;
+const float TOL = 5;
 
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
-String valInput; // Serial input var.
-int i=0; // loop index var.
-int servo_PWM[6]; // PWM var
-int servo_angles[6];
+Rotation get_rot_matrix(float desired_angles[]){
+  Rotation rot_matrix;
+  rot_matrix.RotateX(desired_angles[0]);
+  rot_matrix.RotateY(desired_angles[1]);
+  rot_matrix.RotateZ(desired_angles[2]);
+  return rot_matrix;
+}
 
-// inverse kin constants 
 
-Point p[6];
-Point b[6];
+// T and desired_angles are input, p, b, beta, s and a are constants, out is alpha
+void inverse_kin(Point pos, float desired_angles[], Point p[], Point b[], float beta[], float s, float a, float out[]) {
 
-p[0].Y() = -111; p[0].X() = 29; p[0].Z() = 0;
-p[1].Y() = -111; p[1].X() = -29; p[1].Z() = 0;
-p[2].Y() = 27.5; p[2].X() = -108.63; p[2].Z() = 0;
-p[3].Y() = 77.5; p[3].X() = -81.2; p[3].Z() = 0;
-p[4].Y() = 77.4; p[4].X() = 81.6; p[4].Z() = 0;
-p[5].Y() = 27; p[5].X() = 109.6; p[5].Z() = 0;
+  float tmp[6];
 
-b[0].Y() = 104.2; b[0].X() = -17.5; b[0].Z() = 0;
-b[1].Y() = 104.2; b[0].X() = 17.5; b[1].Z() = 0;
-b[2].Y() = -36.95; b[2].X() = 99; b[2].Z() = 0;
-b[3].Y() = -67.3; b[3].X() = 81.5; b[3].Z() = 0;
-b[4].Y() = -67.3; b[3].X() = -81.5; b[4].Z() = 0;
-b[5].Y() = -37; b[5].X() = -99; b[5].Z() = 0;
+  Rotation rot_matrix = get_rot_matrix(desired_angles);
 
-float beta[6] = {0, 180, 120, 300, 240, 60}; // servo arm angles
+  Point l;
 
-point T;
-T.X() = 0; T.Y() = 0; T.Z() = 132.37;
+  for (int i = 0; i < 6; i++) {
 
-float a = 16.03;
-float s = 145.23;
+    l = pos + rot_matrix * p[i] - b[i];
 
+    float L = pow(l.X(), 2) + pow(l.Y(), 2) + pow(l.Z(), 2) + pow(a, 2) - pow(s, 2);
+    float M = 2 * a * l.Z();
+    float N = 2 * a * (cos(beta[i]) * l.X() + sin(beta[i]) * l.Y());
+
+    tmp[i] = asin(L / sqrt(pow(M, 2) + pow(N, 2))) - atan2(N, M);
+
+    if (isnan(tmp[i]){
+      Serial.print("inverse kin not possible")
+      return;
+    }
+  }
+
+  for (int i = 0; i < 6; i++) {
+    out[i] = tmp[i];
+  }  
+  return;
+}
+
+// Helper function defines constants
+void inverse_kin_helper(float desired_angles[], float out[]){
+  float beta[6] = {0*DEG_TO_RAD, 180*DEG_TO_RAD, 120*DEG_TO_RAD, 300*DEG_TO_RAD, 240*DEG_TO_RAD, 60*DEG_TO_RAD}; // servo arm angles
+  float a = 16.03;
+  float s = 145.23;
+  
+  Point p[6]; // servo position
+  Point b[6]; // bearing positions
+  
+  p[0].Y() = -108; p[0].X() = 29; p[0].Z() = 0;
+  p[1].Y() = -108; p[1].X() = -29; p[1].Z() = 0;
+  p[2].Y() = 29; p[2].X() = -108; p[2].Z() = 0;
+  p[3].Y() = 79; p[3].X() = -79; p[3].Z() = 0;
+  p[4].Y() = 79; p[4].X() = 79; p[4].Z() = 0;
+  p[5].Y() = 29; p[5].X() = 108; p[5].Z() = 0;
+  
+  b[0].Y() = -69.4; b[3].X() = 79.8; b[3].Z() = 0;
+  b[1].Y() = -69.4; b[3].X() = -79.8; b[4].Z() = 0;
+  b[3].Y() = -40.7; b[5].X() = -97.6; b[5].Z() = 0;
+  b[0].Y() = 104; b[0].X() = -20; b[0].Z() = 0;
+  b[1].Y() = 104; b[0].X() = 20; b[1].Z() = 0;
+  b[2].Y() = -40.7; b[2].X() = 97.6; b[2].Z() = 0;
+
+
+  
+  Point pos;
+  pos.X() = 0; pos.Y() = 0; pos.Z() = 138;
+  return inverse_kin(pos, desired_angles, p, b, beta, s, a, out);
+}
+
+// desired angle is roll (x), pitch (y), yaw (unchanged, 0)
+void move_motors(float x, float y, float out[]){
+  y = 255 - y;
+  float desired_angles[3];  
+  if (x >= 128){
+    desired_angles[0] = 5*((x-128)/127)*DEG_TO_RAD; // positive
+  }else{
+    desired_angles[0] = 5*((x-127)/127)*DEG_TO_RAD; // negative
+  } 
+  if (y >= 128){
+    desired_angles[1] = 5*((y-128)/127)*DEG_TO_RAD; // positive
+  }else{
+    desired_angles[1] = 5*((y-127)/127)*DEG_TO_RAD; // negative
+  }
+  desired_angles[2] = 0;
+  Serial.print("Desired Angles: ");
+  Serial.print(desired_angles[0]);
+  Serial.print(", ");
+  Serial.print(desired_angles[1]);
+  Serial.print(" FROM ");
+  Serial.print(x);
+  Serial.print(", ");
+  Serial.print(y);
+  Serial.print("\n")
+  inverse_kin_helper(desired_angles, out);
+}
 
 void setup() {
   Serial.begin(9600);
@@ -81,157 +133,57 @@ void setup() {
   Serial.print(F("\r\nPS3 USB Library Started"));
   pwm.begin();
   pwm.setPWMFreq(60);  // Analog servos run at ~60 Hz updates
-
-  // set neutral 
-  for (i=0; i<6; i++) {
+  
+  // Initialize servo state and set neutral
+  int servo_PWM[6];
+  float servo_angles[6];
+  for (int i=0; i<6; i++) {
     servo_angles[i] = 0;
     servo_PWM[i] = SERVOMID[i];
-    pwm.setPWM(i+1, 0, servo_PWM[i]); // added +1 to match PWM port numbering (pins 1..6 used)
+    pwm.setPWM(i, 0, servo_PWM[i]); // added +1 to match PWM port numbering (pins 1..6 used)
   }
+
+  // Print only when something changes
+  bool flag = True;
 }
 
-// desired angle is roll (x), pitch (y), yaw (unchanged, 0)
-void move_motors(uint8_t x, uint8_t y){
-  y = 255 - y;
-  float desired_angles[3];  
-  if (x >= 128){
-    desired_angles[0] = 5*(x-128)*(PI/180); // positive
-  }else{
-    desired_angles[0] = 5*(x-127)*(PI/180); // negative
-  } 
-  if (y >= 128){
-    desired_angles[1] = 5*(y-128)*(PI/180); // positive
-  }else{
-    desired_angles[1] = 5*(y-127)*(PI/180); // negative
-  }
-  desired_angles[2] = 0;
 
-  inverse_kin(T, desired_angles, p, b, beta, s, a, servo_angles);
-  
-}
 
 void loop() {
   Usb.Task();
 
-
   if (PS3.PS3Connected) {
     if (PS3.getAnalogHat(LeftHatX) > 132 || PS3.getAnalogHat(LeftHatX) < 122 || PS3.getAnalogHat(LeftHatY) > 132 || PS3.getAnalogHat(LeftHatY) < 122) {
-      Serial.print(F("\r\nLeftHatX: "));
-      Serial.print(PS3.getAnalogHat(LeftHatX));
-      Serial.print(F("\tLeftHatY: "));
-      Serial.print(PS3.getAnalogHat(LeftHatY));
-      move_motors(LeftHatX, LeftHatY);
-      for (i=0; i<6; i++) {
-        servo_PWM = servo_angles[i] * PULSE_PER_RAD + SERVOMID[i];
-        Serial.print("Motor " + to_string(i+1) + ": angle=" + to_string(servo_angles[i]*180/PI) + ", PWM="+ to_string(servo_PWM[i]))
-        pwm.setPWM(i+1, 0, servo_PWM[i]);
+      // Serial.print(F("\r\nLeftHatX: "));
+      // Serial.print(PS3.getAnalogHat(LeftHatX));
+      // Serial.print(F("\tLeftHatY: "));
+      // Serial.print(PS3.getAnalogHat(LeftHatY));
+      // Serial.print("\n");
+      move_motors(PS3.getAnalogHat(LeftHatX), PS3.getAnalogHat(LeftHatY), servo_angles);
+      for (int i=0; i<6; i++) {
+        servo_PWM[i] = (int)(servo_angles[i] * PULSE_PER_RAD) + SERVOMID[i];
+        pwm.setPWM(i, 0, servo_PWM[i]);
       }
     }
     else{
       // set neutral 
-      for (i=0; i<6; i++) {
+      for (int i=0; i<6; i++) {
         servo_angles[i] = 0;
         servo_PWM[i] = SERVOMID[i];
-        Serial.print("Motor " + to_string(i+1) + ": angle=" + to_string(servo_angles[i]*180/PI) + ", PWM="+ to_string(servo_PWM[i]))
-        pwm.setPWM(i+1, 0, servo_PWM[i]); // added +1 to match PWM port numbering (pins 1..6 used)
+        pwm.setPWM(i, 0, servo_PWM[i]); // added +1 to match PWM port numbering (pins 1..6 used)
       }
     }
-    // Analog button values can be read from almost all buttons
-    // if (PS3.getAnalogButton(L2) || PS3.getAnalogButton(R2)) {
-    //   Serial.print(F("\r\nL2: "));
-    //   Serial.print(PS3.getAnalogButton(L2));
-    //   if (!PS3.PS3NavigationConnected) {
-    //     Serial.print(F("\tR2: "));
-    //     Serial.print(PS3.getAnalogButton(R2));
-    //   }
-    // }
-    // if (PS3.getButtonClick(PS))
-    //   Serial.print(F("\r\nPS"));
-
-    // if (PS3.getButtonClick(TRIANGLE))
-    //   Serial.print(F("\r\nTraingle"));
-    // if (PS3.getButtonClick(CIRCLE))
-    //   Serial.print(F("\r\nCircle"));
-    // if (PS3.getButtonClick(CROSS))
-    //   Serial.print(F("\r\nCross"));
-    // if (PS3.getButtonClick(SQUARE))
-    //   Serial.print(F("\r\nSquare"));
-
-    // if (PS3.getButtonClick(UP)) {
-    //   Serial.print(F("\r\nUp"));
-    //   PS3.setLedOff();
-    //   PS3.setLedOn(LED4);
-    // }
-    // if (PS3.getButtonClick(RIGHT)) {
-    //   Serial.print(F("\r\nRight"));
-    //   PS3.setLedOff();
-    //   PS3.setLedOn(LED1);
-    // }
-    // if (PS3.getButtonClick(DOWN)) {
-    //   Serial.print(F("\r\nDown"));
-    //   PS3.setLedOff();
-    //   PS3.setLedOn(LED2);
-    // }
-    // if (PS3.getButtonClick(LEFT)) {
-    //   Serial.print(F("\r\nLeft"));
-    //   PS3.setLedOff();
-    //   PS3.setLedOn(LED3);
-    // }
-
-    // if (PS3.getButtonClick(L1))
-    //   Serial.print(F("\r\nL1"));
-    // if (PS3.getButtonClick(L3))
-    //   Serial.print(F("\r\nL3"));
-    // if (PS3.getButtonClick(R1))
-    //   Serial.print(F("\r\nR1"));
-    // if (PS3.getButtonClick(R3))
-    //   Serial.print(F("\r\nR3"));
-
-    // if (PS3.getButtonClick(SELECT)) {
-    //   Serial.print(F("\r\nSelect - "));
-    //   PS3.printStatusString();
-    // }
-    // if (PS3.getButtonClick(START)) {
-    //   Serial.print(F("\r\nStart"));
-    //   printAngle = !printAngle;
-    // }
-  //   if (printAngle) {
-  //     Serial.print(F("\r\nPitch: "));
-  //     Serial.print(PS3.getAngle(Pitch));
-  //     Serial.print(F("\tRoll: "));
-  //     Serial.print(PS3.getAngle(Roll));
-  //   }
-  // }
-  // else if (PS3.PS3MoveConnected) { // One can only set the color of the bulb, set the rumble, set and get the bluetooth address and calibrate the magnetometer via USB
-  //   if (state == 0) {
-  //     PS3.moveSetRumble(0);
-  //     PS3.moveSetBulb(Off);
-  //   } else if (state == 1) {
-  //     PS3.moveSetRumble(75);
-  //     PS3.moveSetBulb(Red);
-  //   } else if (state == 2) {
-  //     PS3.moveSetRumble(125);
-  //     PS3.moveSetBulb(Green);
-  //   } else if (state == 3) {
-  //     PS3.moveSetRumble(150);
-  //     PS3.moveSetBulb(Blue);
-  //   } else if (state == 4) {
-  //     PS3.moveSetRumble(175);
-  //     PS3.moveSetBulb(Yellow);
-  //   } else if (state == 5) {
-  //     PS3.moveSetRumble(200);
-  //     PS3.moveSetBulb(Lightblue);
-  //   } else if (state == 6) {
-  //     PS3.moveSetRumble(225);
-  //     PS3.moveSetBulb(Purple);
-  //   } else if (state == 7) {
-  //     PS3.moveSetRumble(250);
-  //     PS3.moveSetBulb(White);
-  //   }
-
-  //   state++;
-  //   if (state > 7)
-  //     state = 0;
-  //   delay(1000);
-  // }
+  }
+  if (flag) {
+    for (int i=0; i<6; i++) {
+      Serial.print(servo_PWM[i]);
+      Serial.print(" ");
+    }
+    Serial.print("\n");
+    for (int i=0; i<6; i++) {
+      Serial.print(servo_angles[i]/DEG_TO_RAD);
+      Serial.print(" ");
+    }
+    Serial.print("\n");
+  }
 }
