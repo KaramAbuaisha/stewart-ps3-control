@@ -18,9 +18,7 @@ PS3USB PS3(&Usb); // This will just create the instance
 const float SERVOMIN = 175; // 'minimum' pulse length count (out of 4096)
 const float SERVOMAX = 475; // 'maximum' pulse length count (out of 4096)
 const float SERVOMID[6] = {294, 350, 308, 352, 363, 355}; // 'mid' pulse length count (out of 4096)
-const float PS3_CENTER = 127;
 const float PULSE_PER_RAD = 138.8;
-const float TOL = 5;
 
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
@@ -52,8 +50,24 @@ void inverse_kin(Point pos, float desired_angles[], Point p[], Point b[], float 
 
     tmp[i] = asin(L / sqrt(pow(M, 2) + pow(N, 2))) - atan2(N, M);
 
-    if (isnan(tmp[i]){
-      Serial.print("inverse kin not possible")
+    if(isnan(tmp[i])){
+      Serial.print("INVERSE KIN NOT POSSIBLE.\n");
+      // Serial.print(" ");
+      // Serial.print("Motor: ");
+      // Serial.print(i);
+      // Serial.print(", l.X(): ");
+      // Serial.print(l.X());
+      // Serial.print(", l.Y(): ");
+      // Serial.print(l.Y());
+      // Serial.print(", l.Z(): ");
+      // Serial.print(l.Z());
+      // Serial.print(", L: ");
+      // Serial.print(L);
+      // Serial.print(", M: ");
+      // Serial.print(M);
+      // Serial.print(", N: ");
+      // Serial.print(N);
+      // Serial.print("\n");
       return;
     }
   }
@@ -66,64 +80,72 @@ void inverse_kin(Point pos, float desired_angles[], Point p[], Point b[], float 
 
 // Helper function defines constants
 void inverse_kin_helper(float desired_angles[], float out[]){
-  float beta[6] = {0*DEG_TO_RAD, 180*DEG_TO_RAD, 120*DEG_TO_RAD, 300*DEG_TO_RAD, 240*DEG_TO_RAD, 60*DEG_TO_RAD}; // servo arm angles
+  float beta[6] = {0, 180, 240, 60, 120, 300}; // servo arm angles
+  for(int i=0; i<6; i++) {
+    beta[i] /= DEG_TO_RAD
+  }
   float a = 16.03;
-  float s = 145.23;
+  float s = 149.9;
   
   Point p[6]; // servo position
   Point b[6]; // bearing positions
   
-  p[0].Y() = -108; p[0].X() = 29; p[0].Z() = 0;
-  p[1].Y() = -108; p[1].X() = -29; p[1].Z() = 0;
-  p[2].Y() = 29; p[2].X() = -108; p[2].Z() = 0;
-  p[3].Y() = 79; p[3].X() = -79; p[3].Z() = 0;
-  p[4].Y() = 79; p[4].X() = 79; p[4].Z() = 0;
-  p[5].Y() = 29; p[5].X() = 108; p[5].Z() = 0;
+  p[0].X() = 29.1; p[0].Y() = -110.9; p[0].Z() = 0;
+  p[1].X() = -28.9; p[1].Y() = -110.9; p[1].Z() = 0;
+  p[2].X() = -110.5; p[2].Y() = 30; p[2].Z() = 0;
+  p[3].X() = -81.42; p[3].Y() = 80.38; p[3].Z() = 0;
+  p[4].X() = 81.42; p[4].Y() = 80.38; p[4].Z() = 0;
+  p[5].X() = 110.5; p[5].Y() = 30; p[5].Z() = 0;
   
-  b[0].Y() = -69.4; b[3].X() = 79.8; b[3].Z() = 0;
-  b[1].Y() = -69.4; b[3].X() = -79.8; b[4].Z() = 0;
-  b[3].Y() = -40.7; b[5].X() = -97.6; b[5].Z() = 0;
-  b[0].Y() = 104; b[0].X() = -20; b[0].Z() = 0;
-  b[1].Y() = 104; b[0].X() = 20; b[1].Z() = 0;
-  b[2].Y() = -40.7; b[2].X() = 97.6; b[2].Z() = 0;
-
+  b[0].X() = 81.5; b[0].Y() = -67.26; b[0].Z() = 0;
+  b[1].X() = -81.5; b[1].Y() = -67.26; b[1].Z() = 0;
+  b[2].X() = -99; b[2].Y() = -36.95; b[2].Z() = 0;
+  b[3].X() = -17.5; b[3].Y() = 104.21; b[3].Z() = 0;
+  b[4].X() = 17.5; b[4].Y() = 104.21; b[4].Z() = 0;
+  b[5].X() = 99; b[5].Y() = -36.95; b[5].Z() = 0;
 
   
   Point pos;
-  pos.X() = 0; pos.Y() = 0; pos.Z() = 138;
-  return inverse_kin(pos, desired_angles, p, b, beta, s, a, out);
+  pos.X() = 0; pos.Y() = 0; pos.Z() = 126.17;
+  inverse_kin(pos, desired_angles, p, b, beta, s, a, out);
+  return;
 }
 
-// desired angle is roll (x), pitch (y), yaw (unchanged, 0)
-void move_motors(float x, float y, float out[]){
+// desired angle is roll (x), pitch 󰀀, yaw (unchanged, 0)
+void move_motors(float current_state[], float x, float y, float out[]){
   y = 255 - y;
-  float desired_angles[3];  
+  float DELTA = 0.03; // TUNE THIS
   if (x >= 128){
-    desired_angles[0] = 5*((x-128)/127)*DEG_TO_RAD; // positive
+    current_state[0] += DELTA*((x-128)/127)*DEG_TO_RAD; // positive
   }else{
-    desired_angles[0] = 5*((x-127)/127)*DEG_TO_RAD; // negative
+    current_state[0] += DELTA*((x-127)/127)*DEG_TO_RAD; // negative
   } 
   if (y >= 128){
-    desired_angles[1] = 5*((y-128)/127)*DEG_TO_RAD; // positive
+    current_state[1] += DELTA*((y-128)/127)*DEG_TO_RAD; // positive
   }else{
-    desired_angles[1] = 5*((y-127)/127)*DEG_TO_RAD; // negative
+    current_state[1] += DELTA*((y-127)/127)*DEG_TO_RAD; // negative
   }
-  desired_angles[2] = 0;
-  Serial.print("Desired Angles: ");
-  Serial.print(desired_angles[0]);
-  Serial.print(", ");
-  Serial.print(desired_angles[1]);
-  Serial.print(" FROM ");
-  Serial.print(x);
-  Serial.print(", ");
-  Serial.print(y);
-  Serial.print("\n")
-  inverse_kin_helper(desired_angles, out);
+  current_state[2] = 0;
+  // Serial.print("Desired State: ");
+  // Serial.print(current_state[0]);
+  // Serial.print(", ");
+  // Serial.print(current_state[1]);
+  // Serial.print(" FROM ");
+  // Serial.print(x);
+  // Serial.print(", ");
+  // Serial.print(y);
+  // Serial.print("\n");
+  inverse_kin_helper(current_state, out);
 }
+
+// Initialize servo state and set neutral
+int servo_PWM[6];
+float servo_angles[6];
+float current_state[3];
 
 void setup() {
   Serial.begin(9600);
-#if !defined(__MIPSEL__)
+#if !defined(MIPSEL)
   while (!Serial); // Wait for serial port to connect - used on Leonardo, Teensy and other boards with built-in USB CDC serial connection
 #endif
   if (Usb.Init() == -1) {
@@ -133,21 +155,22 @@ void setup() {
   Serial.print(F("\r\nPS3 USB Library Started"));
   pwm.begin();
   pwm.setPWMFreq(60);  // Analog servos run at ~60 Hz updates
-  
-  // Initialize servo state and set neutral
-  int servo_PWM[6];
-  float servo_angles[6];
+ 
   for (int i=0; i<6; i++) {
     servo_angles[i] = 0;
     servo_PWM[i] = SERVOMID[i];
     pwm.setPWM(i, 0, servo_PWM[i]); // added +1 to match PWM port numbering (pins 1..6 used)
   }
+  for (int i=0; i<3; i++) {
+    current_state[i]=0;
+  }
 
-  // Print only when something changes
-  bool flag = True;
 }
 
 
+// Print only when something changes
+bool flag = true;
+bool neutral = true;
 
 void loop() {
   Usb.Task();
@@ -159,29 +182,39 @@ void loop() {
       // Serial.print(F("\tLeftHatY: "));
       // Serial.print(PS3.getAnalogHat(LeftHatY));
       // Serial.print("\n");
-      move_motors(PS3.getAnalogHat(LeftHatX), PS3.getAnalogHat(LeftHatY), servo_angles);
+      move_motors(current_state, PS3.getAnalogHat(LeftHatX), PS3.getAnalogHat(LeftHatY), servo_angles);
+      flag = true;
+      neutral = false;
       for (int i=0; i<6; i++) {
-        servo_PWM[i] = (int)(servo_angles[i] * PULSE_PER_RAD) + SERVOMID[i];
+        servo_PWM[i] = max(min(((int)(servo_angles[i] * PULSE_PER_RAD) + SERVOMID[i]), SERVOMAX), SERVOMIN);
         pwm.setPWM(i, 0, servo_PWM[i]);
       }
     }
-    else{
-      // set neutral 
+    else if (PS3.getButtonClick(PS) && !neutral){
+      // set neutral
+      neutral = true;
+      flag = true;
       for (int i=0; i<6; i++) {
         servo_angles[i] = 0;
         servo_PWM[i] = SERVOMID[i];
         pwm.setPWM(i, 0, servo_PWM[i]); // added +1 to match PWM port numbering (pins 1..6 used)
       }
+      for (int i=0; i<3; i++) {
+        current_state[i]=0;
+      }
     }
   }
+  
   if (flag) {
+    flag=false;
     for (int i=0; i<6; i++) {
       Serial.print(servo_PWM[i]);
       Serial.print(" ");
     }
     Serial.print("\n");
     for (int i=0; i<6; i++) {
-      Serial.print(servo_angles[i]/DEG_TO_RAD);
+      float angle_print = servo_angles[i]/DEG_TO_RAD;
+      Serial.print(angle_print);
       Serial.print(" ");
     }
     Serial.print("\n");
