@@ -27,7 +27,6 @@ float current_state[3];
 float desired_state[3];
 
 // Print only when something changes
-bool flag = true;
 bool neutral = true;
 
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
@@ -104,7 +103,7 @@ bool inverse_kin() {
 // desired angle is roll (x), pitch 󰀀, yaw (unchanged, 0)
 void move_motors(float x, float y){
   y = 255 - y;
-  float ANGLE_LIMIT = 4*DEG_TO_RAD; // TUNE 
+  float ANGLE_LIMIT = 3.5*DEG_TO_RAD; // TUNE 
   float pitch = current_state[0];
   float roll = current_state[1];
   if (x > 162){
@@ -130,7 +129,6 @@ void move_motors(float x, float y){
   mag = sqrt(pow(delta_pitch, 2) + pow(delta_roll, 2));
   if (desired_state[0] == 0 && desired_state[1] == 0 && DELTA > mag){
     if (!neutral){
-      flag = true;
       neutral = true;
     }
     for (int i=0; i<6; i++) {
@@ -141,9 +139,6 @@ void move_motors(float x, float y){
   }
   else{
     neutral = false;
-    if (mag != 0){
-      flag = true; 
-    }
     if (mag > DELTA){
       current_state[0] += delta_pitch * (DELTA/mag);
       current_state[1] += delta_roll * (DELTA/mag);
@@ -158,108 +153,6 @@ void move_motors(float x, float y){
   }
 }
 
-void move_motors2(float x, float y){
-  y = 255 - y;
-
-  float pitch = current_state[0];
-  float roll = current_state[1];
-
-  if (x > 162){
-    x = 1;
-  }else if (x < 92){
-    x = -1;
-  }else{
-    x = 0;
-  }
-  if (y > 162){
-    y = 1;
-  }else if (y < 92){
-    y = -1;
-  }else{
-    y = 0;
-  }
-
-//  Serial.print("Desired State: ");
-  if(x==1 && y==1){ // right and forward
-    desired_state[0] = 2.7;
-    desired_state[1] = 4.9;
-    Serial.print("right and forward");
-  }else if(x==1 && y==-1){ // right and back
-    desired_state[0] = 3.5;
-    desired_state[1] = -2.6;
-    Serial.print("right and back");
-  }else if(x==1 && y==0){ // right
-    desired_state[0] = 3.4;
-    desired_state[1] = 2.4;
-    Serial.print("right");
-  }else if(x==-1 && y==1){ // left and forward
-    desired_state[0] = -2.1;
-    desired_state[1] = 2.6;
-    Serial.print("left and forward");
-  }else if(x==-1 && y==-1){ // left and back
-    desired_state[0] = -2;
-    desired_state[1] = -2.7;
-    Serial.print("left and back");
-  }else if(x==-1 && y==0){ // left
-    desired_state[0] = -3.5;
-    desired_state[1] = 0.4;
-    Serial.print("left");
-  }else if(x==0 && y==1){ // forward
-    desired_state[0] = 0.3;
-    desired_state[1] = 4.3;
-    Serial.print("forward");
-  }else if(x==0 && y==-1){ // back
-    desired_state[0] = 2.3;
-    desired_state[1] = -3.5;
-    Serial.print("back");
-  }else{
-    desired_state[0] = 0;
-    desired_state[1] = 0;
-    Serial.print("center");
-  }
-  desired_state[0] *= DEG_TO_RAD;
-  desired_state[1] *= DEG_TO_RAD;
-//  Serial.print(" FROM ");
-//  Serial.print(x);
-//  Serial.print(", ");
-//  Serial.print(y);
-  Serial.print("\n");
-
-  float DELTA = 0.8 * DEG_TO_RAD;
-  float delta_pitch, delta_roll, mag;
-
-  delta_pitch = desired_state[0] - current_state[0];
-  delta_roll = desired_state[1] - current_state[1];
-  mag = sqrt(pow(delta_pitch, 2) + pow(delta_roll, 2));
-  if (desired_state[0] == 0 && desired_state[1] == 0 && DELTA > mag){
-    if (!neutral){
-      flag = true;
-      neutral = true;
-    }
-    for (int i=0; i<6; i++) {
-      servo_angles[i] = 0;
-    }
-    current_state[0] = 0;
-    current_state[1] = 0;
-  }
-  else{
-    neutral = false;
-    if (mag != 0){
-      flag = true; 
-    }
-    if (mag > DELTA){
-      current_state[0] += delta_pitch * (DELTA/mag);
-      current_state[1] += delta_roll * (DELTA/mag);
-    }else{
-      current_state[0] += delta_pitch;
-      current_state[1] += delta_roll;
-    }
-    if (!inverse_kin()) {
-      current_state[0] = pitch;
-      current_state[1] = roll;
-    }
-  }
-}
 
 // Initialize servo state and set neutral
 void setup() {
@@ -268,10 +161,10 @@ void setup() {
   while (!Serial); 
 #endif
   if (Usb.Init() == -1) {
-    Serial.print(F("\r\nOSC did not start"));
+    Serial.print(F("OSC did not start\r\n"));
     while (1); //halt
   }
-  Serial.print(F("\r\nPS3 USB Library Started"));
+  Serial.print(F("PS3 USB Library Started\r\n"));
   pwm.begin();
   pwm.setPWMFreq(60);  // Analog servos run at ~60 Hz updates
  
@@ -298,19 +191,4 @@ void loop() {
       pwm.setPWM(i, 0, servo_PWM[i]);
     }
   }
-  // Debug output
-  // if (flag) {
-  //   flag=false;
-  //   for (int i=0; i<6; i++) {
-  //     Serial.print(servo_PWM[i]);
-  //     Serial.print(" ");
-  //   }
-  //   Serial.print("\n");
-  //   for (int i=0; i<6; i++) {
-  //     float angle_print = servo_angles[i]/DEG_TO_RAD;
-  //     Serial.print(angle_print);
-  //     Serial.print(" ");
-  //   } 
-  //   Serial.print("\n");
-  // }
 }
